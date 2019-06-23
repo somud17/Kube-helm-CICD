@@ -10,29 +10,34 @@ jx create cluster would
 - Install Jenkins X platform for Minikube Cluster
 	- Create jx namespace
 		- Deploys addons like jenkins, ChartMuseum, Docker Registry etc.
-	- Create jx-staging namespace for staging environment
-	- Create jx-production namespace for production environment
+	- Create jx-devlopment namespace for devlopment environment
+	- Create jx-monitoring namespace for monitoring environment
 - Connects to our GitHub and creates two GitHub repository for GitOps
-	- Environment-xxxxxxx-staging
-	- Environment-xxxxxxx-production
+	- Environment-xxxxxxx-devlopment
+	- Environment-xxxxxxx-monitoring
 
 # Install Jenkins and configure CI pipelines
 
 1 - Install Java.
+
 		sudo apt update
 		sudo apt install openjdk-8-jdk
 		
 2 - Add the Jenkins Debian repository.
+
 		wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | sudo apt-key add -
 	Next, add the Jenkins repository to the system with:
 		sudo sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
 
 3 - Install Jenkins.
+
 		sudo apt update
 		sudo apt install jenkins
 		systemctl status jenkins
-		You should see something similar to this:
-			Output:
+		
+	You should see something similar to this:
+	Output:
+			
 			● jenkins.service - LSB: Start Jenkins at boot time
 			Loaded: loaded (/etc/init.d/jenkins; generated)
 			Active: active (exited) since Wed 2018-08-22 1308 PDT; 2min 16s ago
@@ -41,21 +46,24 @@ jx create cluster would
 			CGroup: /system.slice/jenkins.service
 
 4 - If 8080 port is in use, adjust Firewall as below:
+
 		sudo ufw allow 8080
 		Verify the change with:
 			sudo ufw status
 
 5 - Setting Up Jenkins
-		To set up your new Jenkins installation, open your browser, type your domain or IP address followed by port 8080,
+	
+	To set up your new Jenkins installation, open your browser, type your domain or IP address followed by port 8080,
 		http://your_ip_or_domain:8080.
-		During the installation, the Jenkins installer creates an initial 32-character long alphanumeric password. 
-		Use the following command to print the password on your terminal:
+	
+	During the installation, the Jenkins installer creates an initial 32-character long alphanumeric password. 
+	Use the following command to print the password on your terminal:
+		
 		cat /var/lib/jenkins/secrets/initialAdminPassword
 
 6 - Copy the password from your terminal, paste it into the Administrator password field and click Continue.
 
-7 - On the next screen, the setup wizard will ask you whether you want to install suggested plugins or you want to select specific plugins. 
-	Click on the Install suggested plugins box, and the installation process will start immediately.
+7 - On the next screen, the setup wizard will ask you whether you want to install suggested plugins or you want to select specific plugins. Click on the Install suggested plugins box, and the installation process will start immediately.
 
 8 - Once the plugins are installed, you will be prompted to set up the first admin user. Fill out all required information and click Save and Continue.
 
@@ -63,22 +71,19 @@ jx create cluster would
 
 10 - Confirm the URL by clicking on the Save and Finish button and the setup process will be completed.
 
-11 - Click on the Start using Jenkins button and you will be redirected to the Jenkins dashboard logged in as the admin user you have created 
-	 in one of the previous steps.
+11 - Click on the Start using Jenkins button and you will be redirected to the Jenkins dashboard logged in as the admin user you have created in one of the previous steps.
 
 12 - At this point, you’ve successfully installed Jenkins on your system.
 
 #  Helm install and Configure:
 
 1 - Install And Configure Helm And Tiller
-	The easiest way to run and manage applications in a Kubernetes cluster is using Helm. Helm allows you to perform key operations for managing 
-	applications such as install, upgrade or delete. Helm is composed of two parts: Helm (the client) and Tiller (the server). Follow the steps below 
-	to complete both Helm and Tiller installation and create the necessary Kubernetes objects to make Helm work with Role-Based Access Control
-	(RBAC):To install Helm, run the following commands:
+	The easiest way to run and manage applications in a Kubernetes cluster is using Helm. Helm allows you to perform key operations for managing applications such as install, upgrade or delete. Helm is composed of two parts: Helm (the client) and Tiller (the server). Follow the steps below to complete both Helm and Tiller installation and create the necessary Kubernetes objects to make Helm work with Role-Based Access Control (RBAC):To install Helm, run the following commands:
 
 		curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get > get_helm.sh
 		chmod 700 get_helm.sh
 		./get_helm.sh
+		
 2 - Create a ClusterRole configuration file with the content below. In this example, it is named clusterrole.yaml.
 
 		apiVersion: rbac.authorization.k8s.io/v1
