@@ -123,33 +123,42 @@ Helm install and Configure:
 		tiller-deploy-2885612843-xrj5m   1/1       Running   0   4d
 
 Guestbook
+
 Guestbook is a simple, multi-tier PHP-based web application that uses redis chart.
 
-TL;DR;
 $ helm install stable/guestbook
+
 Introduction
+
 This chart bootstraps a guestbook deployment on a Kubernetes cluster using the Helm package manager.
 
 It also packages the Bitnami Redis chart which is required for bootstrapping a Redis deployment for the caching requirements of the guestbook application.
 
 Prerequisites
+
 Kubernetes 1.4+ with Beta APIs enabled
 PV provisioner support in the underlying infrastructure
+
 Installing the Chart
+
 To install the chart with the release name my-release:
 
 $ helm install --name my-release stable/guestbook
+
 The command deploys the guestbook on the Kubernetes cluster in the default configuration. The configuration section lists the parameters that can be configured during installation.
 
 Tip: List all releases using helm list
 
 Uninstalling the Chart
+
 To uninstall/delete the my-release deployment:
 
 $ helm delete my-release
+
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
 Configuration
+
 The following tables lists the configurable parameters of the WordPress chart and their default values.
 
 Parameter	Description	Default
@@ -164,4 +173,5 @@ $ helm install --name my-release \
   --set redis.usePassword=false \
     stable/guestbook
 $ helm install --name my-release -f values.yaml stable/guestbook
+
 Tip: You can use the default values.yaml
