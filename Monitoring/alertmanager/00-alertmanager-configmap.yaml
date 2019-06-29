@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: alertmanager
+  namespace: monitoring
+data:
+  config.yml: |-
+    global:
+      resolve_timeout: 5m
+      slack_api_url: https://hooks.slack.com/services/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
+
+    templates:
+    - '/etc/alertmanager-templates/*.tmpl'
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 5m
+      receiver: default
+      routes:
+      - match:
+          team: devops
+        receiver: devops
+        continue: true
+      - match:
+          team: dev
+        receiver: dev
+        continue: true
+
+    receivers:
+
+    - name: 'default'
+      slack_configs:
+      - slack_api_url: https://hooks.slack.com/services/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
+        channel: '#prometheus4grafana'
+        send_resolved: true
+
+
+    - name: 'devops'
+      slack_configs:
+      - slack_api_url: https://hooks.slack.com/services/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
+        channel: '#prometheus4grafana'
+        send_resolved: true
+
+
+    - name: 'dev'
+      slack_configs:
+      - slack_api_url: https://hooks.slack.com/services/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
+        channel: '#prometheus4grafana'
+        send_resolved: true
