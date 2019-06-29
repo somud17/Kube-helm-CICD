@@ -7,13 +7,13 @@ jx create cluster would
 - Install and configure helm
 - Connect to GitHub account using API Token
 - Install ingress Controller
-- Install Jenkins X platform for Minikube Cluster
+- Install Jenkins X platform for Kubernetes Cluster
 	- Create jx namespace
 		- Deploys addons like jenkins, ChartMuseum, Docker Registry etc.
-	- Create jx-devlopment namespace for devlopment environment
+	- Create jx-devlopment namespace for development environment
 	- Create jx-monitoring namespace for monitoring environment
 - Connects to our GitHub and creates two GitHub repository for GitOps
-	- Environment-xxxxxxx-devlopment
+	- Environment-xxxxxxx-development
 	- Environment-xxxxxxx-monitoring
 
 # Install Jenkins and configure CI pipelines
@@ -194,3 +194,5 @@ $ helm install --name my-release -f values.yaml stable/guestbook
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
+
+
