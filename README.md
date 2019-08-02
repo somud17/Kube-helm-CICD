@@ -1,79 +1,126 @@
 # Kube-helm-CICD
-Deploy app using helm in kubernetes cluster by CI server(jenkins)
+# task2
 
-jx create cluster would
+# Create a service account
+1. Create the service account itself:
 
-- Set up a single node kubernetes cluster
-- Install and configure helm
-- Connect to GitHub account using API Token
-- Install ingress Controller
-- Install Jenkins X platform for Kubernetes Cluster
-	- Create jx namespace
-		- Deploys addons like jenkins, ChartMuseum, Docker Registry etc.
-	- Create jx-devlopment namespace for development environment
-	- Create jx-monitoring namespace for monitoring environment
-- Connects to our GitHub and creates two GitHub repository for GitOps
-	- Environment-xxxxxxx-development
-	- Environment-xxxxxxx-monitoring
+```console
+gcloud iam service-accounts create jenkins --display-name jenkins
+```
 
-# Install Jenkins and configure CI pipelines
+2. Store the service account email address and your current Google Cloud Platform (GCP) project ID in environment variables for use in later commands:
+```console
+export SA_EMAIL=$(gcloud iam service-accounts list \
+    --filter="displayName:jenkins" --format='value(email)')
+export PROJECT=$(gcloud info --format='value(config.project)')
+```
+3. Bind the following roles to your service account:
+```console
+gcloud projects add-iam-policy-binding $PROJECT \
+    --role roles/storage.admin --member serviceAccount:$SA_EMAIL
+gcloud projects add-iam-policy-binding $PROJECT --role roles/compute.instanceAdmin.v1 \
+    --member serviceAccount:$SA_EMAIL
+gcloud projects add-iam-policy-binding $PROJECT --role roles/compute.networkAdmin \
+    --member serviceAccount:$SA_EMAIL
+gcloud projects add-iam-policy-binding $PROJECT --role roles/compute.securityAdmin \
+    --member serviceAccount:$SA_EMAIL
+gcloud projects add-iam-policy-binding $PROJECT --role roles/iam.serviceAccountActor \
+    --member serviceAccount:$SA_EMAIL
+```
+# Download the service account key
+Now that you've granted the service account the appropriate permissions, you need to create and download its key. Keep the key in a safe place. You'll use it later step when you configure the JClouds plugin to authenticate with the Compute Engine API.
 
-1 - Install Java.
+1. Create the key file:
+```console
+gcloud iam service-accounts keys create jenkins-sa.json --iam-account $SA_EMAIL
+```
+2. In Cloud Shell, click More :, and then click Download file.
 
-		sudo apt update
-		sudo apt install openjdk-8-jdk
-		
-2 - Add the Jenkins Debian repository.
+3. Type jenkins-sa.json.
 
-		wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | sudo apt-key add -
-	Next, add the Jenkins repository to the system with:
-		sudo sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
+4. Click Download to save the file locally.
 
-3 - Install Jenkins.
+# Create a Jenkins agent image
+Next, you create a reusable Compute Engine image that contains the software and tools needed to run as a Jenkins executor.
 
-		sudo apt update
-		sudo apt install jenkins
-		systemctl status jenkins
-		
-	You should see something similar to this:
-	Output:
-			
-			● jenkins.service - LSB: Start Jenkins at boot time
-			Loaded: loaded (/etc/init.d/jenkins; generated)
-			Active: active (exited) since Wed 2018-08-22 1308 PDT; 2min 16s ago
-				Docs: man:systemd-sysv-generator(8)
-				Tasks: 0 (limit: 2319)
-			CGroup: /system.slice/jenkins.service
+Create an SSH key for Cloud Shell
+Use Packer to build your images, which requires the ssh command to communicate with your build instances. To enable SSH access, create and upload an SSH key in Cloud Shell:
 
-4 - If 8080 port is in use, adjust Firewall as below:
+Create a SSH key pair. If one already exists, this command uses that key pair; otherwise, it creates a new one:
+```console
+ls ~/.ssh/id_rsa.pub || ssh-keygen -N ""
+```
+Add the Cloud Shell public SSH key to your project's metadata:
+```console
+gcloud compute project-info describe \
+    --format=json | jq -r '.commonInstanceMetadata.items[] | select(.key == "ssh-keys") | .value' > sshKeys.pub
+echo "$USER:$(cat ~/.ssh/id_rsa.pub)" >> sshKeys.pub
+gcloud compute project-info add-metadata --metadata-from-file ssh-keys=sshKeys.pub
+```
+Create the baseline image
 
-		sudo ufw allow 8080
-		Verify the change with:
-			sudo ufw status
+The next step is to use Packer to create a baseline virtual machine (VM) image for your build agents, which act as ephemeral build executors in Jenkins. The most basic Jenkins agent only requires Java to be installed. You can customize your image by adding shell commands in the provisioners section of the Packer configuration or by adding other Packer provisioners.
 
-5 - Setting Up Jenkins
-	
-	To set up your new Jenkins installation, open your browser, type your domain or IP address followed by port 8080,
-		http://your_ip_or_domain:8080.
-	
-	During the installation, the Jenkins installer creates an initial 32-character long alphanumeric password. 
-	Use the following command to print the password on your terminal:
-		
-		cat /var/lib/jenkins/secrets/initialAdminPassword
+In Cloud Shell, download and unpack Packer:
+```console
+wget https://releases.hashicorp.com/packer/0.12.3/packer_0.12.3_linux_amd64.zip
+unzip packer_0.12.3_linux_amd64.zip
+```
+Create the configuration file for your Packer image builds:
+```console
+export PROJECT=$(gcloud info --format='value(config.project)')
+cat > jenkins-agent.json <<EOF
+{
+  "builders": [
+    {
+      "type": "googlecompute",
+      "project_id": "$PROJECT",
+      "source_image_family": "ubuntu-1604-lts",
+      "source_image_project_id": "ubuntu-os-cloud",
+      "zone": "us-central1-a",
+      "disk_size": "10",
+      "image_name": "jenkins-agent-{{timestamp}}",
+      "image_family": "jenkins-agent",
+      "ssh_username": "ubuntu"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": ["sudo apt-get update",
+                  "sudo apt-get install -y default-jdk"]
+    }
+  ]
+}
+EOF
+```
+Build the image by running Packer:
+```console
+./packer build jenkins-agent.json
+```
+When the build completes, the name of the disk image is displayed with the format jenkins-agent-[TIMESTAMP], where [TIMESTAMP] is the epoch time when the build started.
+```console
+==> Builds finished. The artifacts of successful builds are:
+--> googlecompute: A disk image was created: jenkins-agent-{timestamp}
+```
 
-6 - Copy the password from your terminal, paste it into the Administrator password field and click Continue.
+# Now we will create an Jenkins instance via terraform .
 
-7 - On the next screen, the setup wizard will ask you whether you want to install suggested plugins or you want to select specific plugins. Click on the Install suggested plugins box, and the installation process will start immediately.
+Clone the repository https://github.com/somud17/task2
+```console
+git clone https://github.com/somud17/task2
+````
 
-8 - Once the plugins are installed, you will be prompted to set up the first admin user. Fill out all required information and click Save and Continue.
+Create jenkins instance with ready kubernetes cluster, follow below steps:
+```console
+terraform init
+terraform plan
+terraform validate
+terraform apply
 
-9 - The next page will ask you to set the URL for your Jenkins instance. The field will be populated with an automatically generated URL.
+```
 
-10 - Confirm the URL by clicking on the Save and Finish button and the setup process will be completed.
 
-11 - Click on the Start using Jenkins button and you will be redirected to the Jenkins dashboard logged in as the admin user you have created in one of the previous steps.
-
-12 - At this point, you’ve successfully installed Jenkins on your system.
 
 #  Helm install and Configure:
 
