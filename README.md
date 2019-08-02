@@ -215,16 +215,6 @@ $ helm delete my-release
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
 
-## Configuration
-
-The following tables lists the configurable parameters of the WordPress chart and their default values.
-
-| Parameter                            | Description                                | Default                                                    |
-| -------------------------------      | -------------------------------            | ---------------------------------------------------------- |
-| `image`                              | apapche-php image                          | `google-samples/gb-frontend:{VERSION}`                     |
-| `imagePullPolicy`                    | Image pull policy                          | `IfNotPresent`                                             |
-| `nodeSelector`                       | Node labels for pod assignment             | `{}`                                                       |
-
 The above parameters map to the env variables defined in [bitnami/wordpress](http://github.com/bitnami/bitnami-docker-wordpress). For more information please refer to the [bitnami/wordpress](http://github.com/bitnami/bitnami-docker-wordpress) image documentation.
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
