@@ -106,9 +106,9 @@ When the build completes, the name of the disk image is displayed with the forma
 
 # Now we will create an Jenkins instance via terraform .
 
-Clone the repository https://github.com/somud17/task2
+Clone the repository https://github.com/somud17/Kube-helm-CICD
 ```console
-git clone https://github.com/somud17/task2
+git clone https://github.com/somud17/Kube-helm-CICD
 ````
 
 Create jenkins instance with ready kubernetes cluster, follow below steps:
