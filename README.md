@@ -74,7 +74,7 @@ cat > jenkins-agent.json <<EOF
   "builders": [
     {
       "type": "googlecompute",
-      "project_id": "$PROJECT",
+      "project_id": "instant-node-244015",
       "source_image_family": "ubuntu-1604-lts",
       "source_image_project_id": "ubuntu-os-cloud",
       "zone": "us-central1-a",
@@ -88,7 +88,11 @@ cat > jenkins-agent.json <<EOF
     {
       "type": "shell",
       "inline": ["sudo apt-get update",
-                  "sudo apt-get install -y default-jdk"]
+                  "sudo apt-get install -y default-jdk",
+                  "wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | sudo apt-key add -",
+                  "sudo sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'",
+                  "sudo apt update",
+                  "sudo apt install jenkins -y"]
     }
   ]
 }
@@ -308,28 +312,16 @@ For Image name, select the image you built earlier using Packer.
 Click Save to persist your configuration changes.
 
 Compute Engine configurations for Jenkins.
-
-Creating a Jenkins job to test the configuration
-Jenkins is configured to automatically launch an instance when a job is triggered that requires an agent with the ubuntu-1604 label. Create a job that tests whether the configuration is working as expected.
-
+Now we will deploy guestbook app with helm from CI/CD with jenkins pipeline.
+For this clone below repo:
+```console
+git clone https://github.com/somud17/CI-CDPipeline
+```
 Click Create new job in the Jenkins interface.
-Enter test as the item name.
-Click Freestyle project, and then click OK.
+Enter Guestbook_pipeline as the item name.
+Click pipeline project, and then click OK.
 Select the Execute concurrent builds if necessary and Restrict where this project can run boxes.
-In the Label Expression field, enter ubuntu-1604.
-
-New job in Jenkins.
-
-In the Build section, click Add build step.
-
-Click Execute Shell.
-
-In the command box, enter a test string:
-
-echo "Hello world!"
-Hello World typed in the command box for Jenkins.
-
-Click Save.
+Configure pipeline with GIT SCM and jenkins file from github will pickup the config to deploy guestbook app.
 
 Click Build Now to start a build.
 
@@ -437,8 +429,78 @@ Delete the service account:
 export SA_EMAIL=$(gcloud iam service-accounts list --filter="displayName:jenkins" --format='value(email)')
 gcloud iam service-accounts delete $SA_EMAIL
 ```
-Now we will deploy guestbook app with helm from CI/CD with jenkins pipeline.
-For this clone below repo:
+
+# Kubernetes monitoring and alerting in less than 5 minutes
+
+Kubelet natively exposes cadvisor metrics at https://kubernetes.default.svc:443/api/v1/nodes/{node-name}/proxy/metrics/cadvisor and we can use a 
+prometheus server to scrape this endpoint. These metrics can then be visualized using Grafana. Metrics can alse be scraped from pods and service 
+endpoints if they expose metircs on /metrics (as in the case of nginx-ingress-controller), alternatively you can sepcify custom scrape target in the 
+prometheus config map.
+
+Some Important metrics which are not exposed by the kubelet, can be fetched using kube-state-metrics and then pulled by prometheus.
+
+Setup:
+
+1. If you have not already deployed the nginx-ingress controller then
+    - Uncomment `type: LoadBalancer` field in Alertmanager, Prometheus and Grafana Services.
+2. Deployment:
+        - Deploy Alertmanger: kubectl apply -f k8s/monitoring/alertmanager
+        - Deploy Prometheus: kubectl apply -f k8s/monitoring/prometheus
+        - Deploy Kube-state-metrics: kubectl apply -f k8s/monitoring/kube-state-metrics
+        - Deploy Node-Exporter: kubectl apply -f k8s/monitoring/node-exporter
+        - Deploy Grafana: kubectl apply -f k8s/monitoring/grafana
+        - Deploy the Ingress: kubectl apply -f k8s/monitoring/ingress.yaml
+
+3. Once grafana is running:
+        - Access grafana at grafana.yourdomain.com in case of Ingress or http://<LB-IP>:3000 in case of type: LoadBalancer
+        - Add DataSource:
+          - Name: DS_PROMETHEUS - Type: Prometheus
+          - URL: http://prometheus-service:8080
+          - Save and Test. You can now build your custon dashboards or simply import dashboards from grafana.net. Dasboard #315 and #1471 are good to start with.
+          - You can also import the dashboards from k8s/monitoring/dashboards
+
+Note:
+
+1. A Cluster-binding role for prometheus is already being created by the config. The role currently has admin permissions, however you can modify it 
+	to a viewer role only.
+2. If you need to update the prometheus config, it can be reloaded by making an api call to the prometheus server. 
+	`curl -XPOST http://<prom-service>:<prom-port>/-/reload`
+3. Some basic alering rules are defined in the prometheus rules file which can be updated before deploying. You can also add more rules under 
+	the same groups or create new ones.
+4. Before deploying prometheus please create GCP PD-SSD of size 250Gi or more, and name it `pd-ssd-disk-01`.
+5. Please update `00-alertmanager-configmap.yaml` to reflect correct api_url for Slack and VictorOps. You can additionally add more receievers. 
+	Ref:  https://prometheus.io/docs/alerting/configuration/
+
+Create a file ingress to redirect the incoming traffic. ingress.yaml
 ```console
-git clone https://github.com/somud17/CI-CDPipeline
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: grafana.yourdomain.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: grafana
+          servicePort: 3000
+  - host: prometheus.yourdomain.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: prometheus-service
+          servicePort: 8080
+  - host: alertmanager.yourdomain.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: alertmanager
+          servicePort: 9093root@master:~/monitoring#
 ```
