@@ -119,8 +119,60 @@ terraform validate
 terraform apply
 
 ```
+First we will install, configure the kubernetes cluster, helm and then configure jenkins to work with CI/CD.
 
+# Starting a Kubernetes cluster
+You can install a client and start a cluster with either one of these commands (we list both in case only one is installed on your machine):
+```console
+curl -sS https://get.k8s.io | bash
+or
 
+wget -q -O - https://get.k8s.io | bash
+```
+Once this command completes, you will have a master VM and four worker VMs, running as a Kubernetes cluster.
+
+By default, some containers will already be running on your cluster. Containers like fluentd provide logging, while heapster provides monitoring services.
+
+The script run by the commands above creates a cluster with the name/prefix “kubernetes”. It defines one specific cluster config, so you can’t run it more than once.
+
+Alternately, you can download and install the latest Kubernetes release from this page, then run the <kubernetes>/cluster/kube-up.sh script to start the cluster:
+```console
+cd kubernetes
+cluster/kube-up.sh
+```
+
+Getting started with your cluster
+Inspect your cluster
+Once kubectl is in your path, you can use it to look at your cluster. E.g., running:
+```console
+kubectl get --all-namespaces services
+```
+should show a set of services that look something like this:
+```console
+NAMESPACE     NAME          TYPE             CLUSTER_IP       EXTERNAL_IP       PORT(S)        AGE
+default       kubernetes    ClusterIP        10.0.0.1         <none>            443/TCP        1d
+kube-system   kube-dns      ClusterIP        10.0.0.2         <none>            53/TCP,53/UDP  1d
+kube-system   kube-ui       ClusterIP        10.0.0.3         <none>            80/TCP         1d
+```
+Similarly, you can take a look at the set of pods that were created during cluster startup. You can do this via the
+```console
+kubectl get --all-namespaces pods
+```
+command.
+
+You’ll see a list of pods that looks something like this (the name specifics will be different):
+```console
+NAMESPACE     NAME                                           READY     STATUS    RESTARTS   AGE
+kube-system   coredns-5f4fbb68df-mc8z8                       1/1       Running   0          15m
+kube-system   fluentd-cloud-logging-kubernetes-minion-63uo   1/1       Running   0          14m
+kube-system   fluentd-cloud-logging-kubernetes-minion-c1n9   1/1       Running   0          14m
+kube-system   fluentd-cloud-logging-kubernetes-minion-c4og   1/1       Running   0          14m
+kube-system   fluentd-cloud-logging-kubernetes-minion-ngua   1/1       Running   0          14m
+kube-system   kube-ui-v1-curt1                               1/1       Running   0          15m
+kube-system   monitoring-heapster-v5-ex4u3                   1/1       Running   1          15m
+kube-system   monitoring-influx-grafana-v1-piled             2/2       Running   0          15m
+```
+Some of the pods may take a few seconds to start up (during this time they’ll show Pending), but check that they all show as Running after a short period.
 
 #  Helm install and Configure:
 
@@ -174,59 +226,219 @@ terraform apply
 		kubectl --namespace kube-system get pods | grep tiller
 		tiller-deploy-2885612843-xrj5m   1/1       Running   0   4d
 
-# Guestbook
+# Configuring Jenkins plugins
+Jenkins requires plugins to create on-demand agents in Compute Engine and to store artifacts in Cloud Storage. You need to install and configure these plugins.
 
-[Guestbook](https://github.com/kubernetes/examples/tree/master/guestbook) is a simple, multi-tier PHP-based web application that uses redis chart.
+Install plugins
+In the Jenkins UI, select Manage Jenkins.
+Click Manage Plugins.
+Click the Available tab.
+Use the Filter bar to find the following plugins and select the boxes next to them:
 
+Compute Engine plugin
+Cloud Storage plugin
+The following image shows the Cloud Storage plugin selected:
+
+Cloud Storage plugin.
+
+Click Download now and install after restart.
+
+Click the Restart Jenkins when installation is complete and no jobs are running checkbox. Jenkins restarts and completes the plugin installations.
+
+Create plugin credentials
+You need to create Google Credentials for your new plugins:
+
+Log in to Jenkins again, and click Jenkins.
+Click Credentials.
+Click System.
+In the main pane of the UI, click Global credentials (unrestricted).
+Create the Google credentials:
+
+Click Add Credentials.
+Set Kind to Google Service Account from private key.
+In the Project Name field, enter your GCP project ID.
+Click Choose file.
+Select the jenkins-sa.json file that you previously downloaded from Cloud Shell.
+Click OK.
+
+JSON key credentials.
+
+Click Jenkins.
+
+Configure the Compute Engine plugin
+Configure the Compute Engine plugin with the credentials it uses to provision your agent instances.
+
+Click Manage Jenkins.
+Click Configure System.
+Click Add a new Cloud.
+Click Compute Engine.
+Set the following settings and replace [YOUR_PROJECT_ID] with your GCP project ID:
+
+Name: gce
+Project ID: [YOUR_PROJECT_ID]
+Instance Cap: 8
+Choose the service account from the Service Account Credentials drop-down list. It is listed as your GCP project ID.
+
+Configure Jenkins instance configurations
+Now that the Compute Engine plugin is configured, you can configure Jenkins instance configurations for the various build configurations you'd like.
+
+On the Configure System page, click Add add for Instance Configurations.
+Enter the following General settings:
+
+Name: ubuntu-1604
+Description: Ubuntu agent
+Labels: ubuntu-1604
+Enter the following for Location settings:
+
+Region<: us-central1
+Zone: us-central1-f
+Click Advanced.
+
+For Machine Configuration, choose the Machine Type of n1-standard-1.
+
+Under Networking, choose the following settings:
+
+Network: Leave at default setting.
+Subnetwork: Leave at default setting.
+Select Attach External IP?.
+Select the following for Boot Disk settings:
+
+For Image project, choose your GCP project.
+For Image name, select the image you built earlier using Packer.
+Click Save to persist your configuration changes.
+
+Compute Engine configurations for Jenkins.
+
+Creating a Jenkins job to test the configuration
+Jenkins is configured to automatically launch an instance when a job is triggered that requires an agent with the ubuntu-1604 label. Create a job that tests whether the configuration is working as expected.
+
+Click Create new job in the Jenkins interface.
+Enter test as the item name.
+Click Freestyle project, and then click OK.
+Select the Execute concurrent builds if necessary and Restrict where this project can run boxes.
+In the Label Expression field, enter ubuntu-1604.
+
+New job in Jenkins.
+
+In the Build section, click Add build step.
+
+Click Execute Shell.
+
+In the command box, enter a test string:
+
+echo "Hello world!"
+Hello World typed in the command box for Jenkins.
+
+Click Save.
+
+Click Build Now to start a build.
+
+Build Now.
+
+Uploading build artifacts to Cloud Storage
+You might want to store build artifacts for future analysis or testing. Configure your Jenkins job to generate an artifact and upload it to Cloud Storage. The build log is uploaded to the same bucket.
+
+In Cloud Shell, create a storage bucket for your artifacts:
 ```console
-$ helm install stable/guestbook
+export PROJECT=$(gcloud info --format='value(config.project)')
+gsutil mb gs://$PROJECT-jenkins-artifacts
 ```
+In the job list in the Jenkins UI, click test.
 
-## Introduction
+Click Configure.
 
-This chart bootstraps a [guestbook](https://github.com/kubernetes/examples/tree/master/guestbook) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
+Under Build, set the Command text field to:
 
-It also packages the [Bitnami Redis chart](https://github.com/kubernetes/charts/tree/master/stable/redis) which is required for bootstrapping a Redis deployment for the caching requirements of the guestbook application.
+env > build_environment.txt
+Under Post-build Actions, click Add post-build action.
 
-## Prerequisites
+Click Cloud Storage Plugin.
 
-- Kubernetes 1.4+ with Beta APIs enabled
-- PV provisioner support in the underlying infrastructure
-
-## Installing the Chart
-
-To install the chart with the release name `my-release`:
-
+In the Storage Location field, enter your artifact path, substituting your GCP project ID for [YOUR_PROJECT_ID]:
 ```console
-$ helm install --name my-release stable/guestbook
+gs://[YOUR_PROJECT_ID]-jenkins-artifacts/$JOB_NAME/$BUILD_NUMBER
 ```
+Click Add Operation.
 
-The command deploys the guestbook on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
+Click Classic Upload.
 
-> **Tip**: List all releases using `helm list`
+In the File Pattern field, enter build_environment.txt.
 
-## Uninstalling the Chart
-
-To uninstall/delete the `my-release` deployment:
-
+In the Storage Location field, enter your storage path, substituting your GCP project ID for [YOUR_PROJECT_ID]:
 ```console
-$ helm delete my-release
+gs://[YOUR_PROJECT_ID]-jenkins-artifacts/$JOB_NAME/$BUILD_NUMBER
 ```
+Post-build actions for Cloud Storage plugin.
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.
+Click Save.
 
-The above parameters map to the env variables defined in [bitnami/wordpress](http://github.com/bitnami/bitnami-docker-wordpress). For more information please refer to the [bitnami/wordpress](http://github.com/bitnami/bitnami-docker-wordpress) image documentation.
+Click Build Now to start a new build. The build runs on the Compute Engine instance that you provisioned previously. When the build completes, it uploads the artifact file, build_environment.txt, to the configured Cloud Storage bucket.
 
-Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
-
+In Cloud Shell, view the build artifact using gsutil:
 ```console
-$ helm install --name my-release \
-  --set redis.usePassword=false \
-    stable/guestbook
+export PROJECT=$(gcloud info --format='value(config.project)')
+gsutil cat gs://$PROJECT-jenkins-artifacts/test/2/build_environment.txt
 ```
+Configuring object lifecycle management
+You're more likely to access recent build artifacts. To save costs on infrequently accessed objects, use object lifecycle management to move your artifacts from higher-performance storage classes to lower-cost and higher-latency storage classes.
 
+In Cloud Shell, create the lifecycle configuration file to transition all objects to Nearline storage after 30 days and Nearline objects to Coldline storage after 365 days.
 ```console
-$ helm install --name my-release -f values.yaml stable/guestbook
+cat > artifact-lifecycle.json <<EOF
+{
+"lifecycle": {
+  "rule": [
+  {
+    "action": {
+      "type": "SetStorageClass",
+      "storageClass": "NEARLINE"
+    },
+    "condition": {
+      "age": 30,
+      "matchesStorageClass": ["MULTI_REGIONAL", "STANDARD", "DURABLE_REDUCED_AVAILABILITY"]
+    }
+  },
+  {
+    "action": {
+      "type": "SetStorageClass",
+      "storageClass": "COLDLINE"
+    },
+    "condition": {
+      "age": 365,
+      "matchesStorageClass": ["NEARLINE"]
+    }
+  }
+]
+}
+}
+EOF
 ```
-
-> **Tip**: You can use the default [values.yaml](values.yaml)
+Upload the configuration file to your artifact storage bucket:
+```console
+export PROJECT=$(gcloud info --format='value(config.project)')
+gsutil lifecycle set artifact-lifecycle.json gs://$PROJECT-jenkins-artifacts
+```
+Cleaning up
+Delete any Jenkins agents that are still running:
+```console
+gcloud compute instances list --filter=metadata.jclouds-group=ubuntu-1604 --uri | xargs gcloud compute instances delete
+```
+Using Cloud Deployment Manager, delete the Jenkins instance:
+```console
+gcloud deployment-manager deployments delete jenkins-1
+```
+Delete the Cloud Storage bucket:
+```console
+export PROJECT=$(gcloud info --format='value(config.project)')
+gsutil -m rm -r gs://$PROJECT-jenkins-artifacts
+```
+Delete the service account:
+```console
+export SA_EMAIL=$(gcloud iam service-accounts list --filter="displayName:jenkins" --format='value(email)')
+gcloud iam service-accounts delete $SA_EMAIL
+```
+Now we will deploy guestbook app with helm from CI/CD with jenkins pipeline.
+For this clone below repo:
+```console
+git clone https://github.com/somud17/CI-CDPipeline
+```
